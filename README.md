@@ -2,7 +2,7 @@
 Radial Basis Functions (RBF) surrogate modeling strategies developed and implemented during my PhD research ([1](https://doi.org/10.1080/15397734.2021.1950549), [2]( https://doi.org/10.3390/mca28020057), [3](https://doi.org/10.1016/j.cma.2023.116648)). This research focused on leveraging gradient information for constructing RBF models and preprocessing sampled data to improve model performance and accuracy.
 
 ## Implemented Models
-The code includes three types of RBF models in the rbfmodels.py file:
+The code includes three types of RBF models in <mark>rbfmodels.py:
 
 ### 1. FV RBF (Function Value RBF Models)
 Standard RBF models fitted solely to function values of the underlying function.
@@ -14,7 +14,7 @@ RBF models that incorporate both sampled function values and gradient informatio
 RBF models fitted exclusively to gradient information.
 
 ## Shape-Parameter Selection Strategies
-Three strategies for selecting the shape parameter are implemented in the preprocessing.py file:
+Three strategies for selecting the shape parameter are implemented in  <mark>preprocessing.py:
 
 ### 1. K-Fold Cross-Validation Selection
 Splits the data into folds to optimize the shape parameter based on cross-validation performance.
@@ -26,7 +26,7 @@ Uses a separate validation set to select the shape parameter that minimizes the 
 Optimizes the shape parameter based on error estimates derived from gradient information.
 
 ## Key Contributions
-The primary contribution of this work is the development and implementation of strategies to transform the reference frame of the sampled data into one where the function response is isotropic. This transformation mitigates the limitations of RBF models that use isotropic basis functions or kernels. These methods are also in the preprocessing.py file.
+The primary contribution of this work is the development and implementation of strategies to transform the reference frame of the sampled data into one where the function response is isotropic. This transformation mitigates the limitations of RBF models that use isotropic basis functions or kernels. These methods are also in <mark>preprocessing.py.
 
 The code includes implementations of the following methods for reference frame transformation:
 
