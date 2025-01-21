@@ -1,0 +1,19 @@
+[project]
+name = "ge-rbf"
+version = "0.1.0"
+description = "Implementation of research done during PhD"
+authors = [
+    {name = "JohannBouwer",email = "68966619+JohannBouwer@users.noreply.github.com"}
+]
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "numpy (>=2.2.2,<3.0.0)",
+    "scipy (>=1.15.1,<2.0.0)",
+    "matplotlib (>=3.10.0,<4.0.0)"
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
