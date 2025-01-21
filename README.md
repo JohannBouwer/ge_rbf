@@ -1,6 +1,11 @@
 # GE_RBF
 Radial Basis Functions (RBF) surrogate modeling strategies developed and implemented during my PhD research ([1](https://doi.org/10.1080/15397734.2021.1950549), [2]( https://doi.org/10.3390/mca28020057), [3](https://doi.org/10.1016/j.cma.2023.116648)). This research focused on leveraging gradient information for constructing RBF models and preprocessing sampled data to improve model performance and accuracy.
 
+## Table of Contents
+1. [Implemented Models](#implemented-models)
+2. [Shape-Parameter Selection Strategies](#shape-parameter-selection-strategies)
+3. [Key Contributions](#key-contributions)
+
 ## Implemented Models
 The code includes three types of RBF models in <mark>rbfmodels.py:
 
