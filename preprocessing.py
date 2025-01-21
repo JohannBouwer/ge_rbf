@@ -1,242 +1,7 @@
-# %% RBFClass
-# TODO: fix less centers than points in kfold case
-# TODO: Make a SpaceTime class, Network + SpaceTime models, adapt LHM methods.
-
-from sklearn.gaussian_process import GaussianProcessRegressor
-from sklearn.gaussian_process.kernels import ConstantKernel, RBF
-from pyDOE import lhs
-import matplotlib.pyplot as plt
 import numpy as np
+import matplotlib.pyplot as plt
+from rbfmodels import RBFmodel
 from scipy.spatial.distance import cdist
-
-
-class RBFModel:
-    """
-    A class to implement Radial Basis Function (RBF) models including 
-    Function Value (FV), Gradient Enhanced (GE), and Gradient Only (GO) models.
-    """
-
-    def __init__(self, X, y, C=None, dy=None):
-        """
-        Constructor for the RBF model.
-
-        Parameters:
-        X : np.ndarray
-            Input data with shape (n_samples, n_features).
-        y : np.ndarray
-            Target data with shape (n_samples, ).
-        C : np.ndarray, optional
-            Centres for the RBF model, default is X. Shape: (n_centres, n_features).
-        dy : np.ndarray, optional
-            Gradient values with shape (n_samples, n_features).
-        """
-        self.X = np.copy(X)
-        self.X_org = np.copy(X)
-        self.y = np.copy(y)
-        self.dy = np.copy(dy)
-        self.dy_org = None if dy is None else np.copy(dy)
-        self.C = np.copy(X) if C is None else np.copy(C)
-
-        self._n_samples, self._n_features = self.X.shape
-        self._n_centres = self.C.shape[0]
-
-        self.eig = np.ones(self._n_features)
-        self.scalers = np.copy(self.eig)
-        self.evec = np.identity(self._n_features)
-
-    def FV_fit(self, epsi=1):
-        """
-        Fit the Function Value Radial Basis Function (FV-RBF) model.
-
-        Parameters:
-        epsi : float, optional
-            The parameter for the RBF. Default is 1.
-        """
-        self.epsi = epsi
-
-        # Calculate the distance between each pair of points
-        dist_matrix = cdist(self.X, self.C, metric='euclidean')
-
-        # Calculate the RBF kernel matrix
-        kernel_matrix = np.exp(-self.epsi * (dist_matrix ** 2))
-
-        # Solve the linear system to find the coefficients
-        self.coefficients = np.linalg.solve(kernel_matrix, self.y)
-
-        self.cond = np.linalg.cond(kernel_matrix)
-
-    def GE_fit(self, epsi=1):
-        """
-        Fit the Gradient Enhanced Radial Basis Function (GE-RBF) model.
-
-        Parameters:
-        epsi : float, optional
-            The parameter for the RBF. Default is 1.
-        """
-        self.epsi = epsi
-
-        # Calculate the distance between each pair of points
-        dist_matrix = cdist(self.X, self.C, metric='euclidean')
-
-        # Calculate the RBF kernel matrix
-        kernel_matrix = np.exp(-self.epsi * (dist_matrix ** 2))
-
-        # Calculate the RBF gradient kernel matrix (n_samples, n_samples, n_feat)
-        Xm = np.repeat(self.X[:, None, :], self._n_centres, axis=1)
-        Cm = np.repeat(self.C[None, :, :], self._n_samples, axis=0)
-
-        XC = (Xm - Cm).transpose(2, 0, 1)
-
-        kernel_gradients = -2 * self.epsi * XC * kernel_matrix[None, :, :]
-
-        # Reshape the kernel gradient matrix
-        kernel_gradients = kernel_gradients.reshape(
-            self._n_samples*self._n_features, self._n_centres)
-
-        # Create the full matrix
-        kernel_matrix = np.vstack((kernel_matrix, kernel_gradients))
-
-        # Least squares fit
-        Y = np.vstack((self.y.reshape(-1, 1),
-                       self.dy.reshape(self._n_samples * self._n_features, 1, order='F')))
-
-        #self.coefficients = np.linalg.solve(
-            #kernel_matrix.T @ kernel_matrix, kernel_matrix.T @ Y)
-        
-        self.coefficients = np.linalg.lstsq(kernel_matrix, Y, rcond=None)[0]
-
-        self.cond = np.linalg.cond(kernel_matrix)
-
-    def GO_fit(self, X_FV, y, epsi=1):
-        """
-        Fit the Gradient Only Radial Basis Function (GO-RBF) model.
-
-        Parameters:
-        X_FV : np.ndarray
-            Sample locations for the function value.
-        y : np.ndarray
-            Function values.
-        epsi : float, optional
-            The parameter for the RBF. Default is 1.
-        """
-        self.epsi = epsi
-
-        # Calculate the kernel gradient matrix
-        dist_matrix = cdist(self.X, self.C, metric='euclidean')
-
-        # Calculate the RBF kernel matrix
-        kernel_matrix = np.exp(-self.epsi * (dist_matrix ** 2))
-
-        # Calculate the RBF gradient kernel matrix (n_samples, n_samples, n_feat)
-        Xm = np.repeat(self.X[:, None, :], self._n_centres, axis=1)
-        Cm = np.repeat(self.C[None, :, :], self._n_samples, axis=0)
-
-        XC = (Xm - Cm).transpose(2, 0, 1)
-
-        kernel_gradients = -2 * self.epsi * XC * kernel_matrix[None, :, :]
-
-        # Reshape the kernel gradient matrix
-        kernel_gradients = kernel_gradients.reshape(
-            self._n_samples*self._n_features, self._n_centres)
-
-        dist_matrix_FV = cdist(X_FV, self.C, metric='euclidean')
-
-        # Calculate the RBF kernel matrix for the function value points
-        kernel_matrix_FV = np.exp(-self.epsi * (dist_matrix_FV ** 2))
-
-        # Create the full matrix
-        kernel_matrix = np.vstack((kernel_matrix_FV, kernel_gradients))
-
-        # Least squares fit
-        Y = np.vstack((y.reshape(-1, 1),
-                       self.dy.reshape(self._n_samples * self._n_features, 1, order='F')))
-
-        self.coefficients = np.linalg.solve(
-            kernel_matrix.T @ kernel_matrix, kernel_matrix.T @ Y)
-
-        return
-
-    def __call__(self, Xnew, OnlyFunc=False):
-        """
-        Predict using the RBF model.
-
-        Parameters:
-        Xnew : np.ndarray
-           New points for prediction. Shape: (n_samples, n_features).
-        OnlyFunc : bool, optional
-           If True, only function value is returned. Default is False.
-
-        Returns:
-        y_pred : np.ndarray
-            Predicted output. Shape: (n_samples, ).
-        dy_pred : np.ndarray
-            Predicted gradients. Shape: (n_samples, n_features).
-        """
-        # Transform the domain
-        Xt = Xnew @ self.evec * self.scalers
-
-        # Calculate the distance between each input point and the training points
-        dist_matrix = cdist(Xt, self.C, metric='euclidean')
-
-        # Calculate the RBF kernel matrix
-        kernel_matrix = np.exp(-self.epsi * (dist_matrix ** 2))
-
-        # Calculate the predicted output
-        y_pred = kernel_matrix @ self.coefficients
-
-        if OnlyFunc:
-            return y_pred
-
-        # Calculate the gradient matrix
-        Xm = np.repeat(Xt[:, None, :], self._n_centres, axis=1)
-        Cm = np.repeat(self.C[None, :, :], Xt.shape[0], axis=0)
-
-        XC = (Xm - Cm).transpose(2, 0, 1)
-
-        kernel_gradients = -2 * self.epsi * XC * kernel_matrix[None, :, :]
-
-        # Reshape the kernel gradient matrix
-        kernel_gradients = kernel_gradients.reshape(
-            Xt.shape[0]*self._n_features, self._n_centres)
-
-        # chain rule including the rotation.
-        dy_pred = ((kernel_gradients @
-                   self.coefficients).reshape(Xnew.shape, order='F') * self.scalers) @ (self.evec.T )
-
-        return y_pred, dy_pred
-    
-class Kriginig(RBFModel):
-
-    def fit(self):
-        """
-        Fit a Kriging model to the data using GaussianProcessRegressor.
-        """
-
-        # Define the kernel function to be used in Gaussian process
-        kernel = ConstantKernel(1.0) * RBF(length_scale=1.0)
-
-        # Initialize the Gaussian Process model
-        self.gp = GaussianProcessRegressor(
-            kernel=kernel, n_restarts_optimizer=10, alpha=0.1)
-
-        # Fit the GP model to the data
-        self.gp.fit(self.X, self.y)
-
-    def predict_kriging(self, Xnew):
-        """
-        Predict using the Kriging model.
-
-        Parameters:
-        Xnew: numpy array
-            New points for prediction(n_samples, n_features)
-
-        Returns:
-        y_pred: numpy array
-            Predicted output (n_samples,)
-        """
-        y_pred, sigma = self.gp.predict(Xnew, return_std=True)
-        return y_pred, sigma
-
 
 class Preprocessing:
 
@@ -311,7 +76,7 @@ class Preprocessing:
 
                 if Type == 'FV':
                     # Create a dummy model to train on training set
-                    dummy_model = RBFModel(X_train, y_train, C=C_train)
+                    dummy_model = RBFmodel(X_train, y_train, C=C_train)
                     dummy_model.FV_fit(epsi=e)
 
                     y_pred, dy_pred = dummy_model(X_valid)
@@ -327,7 +92,7 @@ class Preprocessing:
                     # Scale the func and grad values to have the same influence
                     sf = (np.mean(np.abs(dy_train)) / np.mean(np.abs(y_train)))
 
-                    dummy_model = RBFModel(
+                    dummy_model = RBFmodel(
                         X_train, y_train, C=C_train, dy=dy_train)
                     
                     dummy_model.GE_fit(epsi=e)
@@ -341,7 +106,7 @@ class Preprocessing:
                     dy_train = model.dy[train_indices, :]
                     dy_valid = model.dy[fold_indices, :]
 
-                    dummy_model = RBFModel(
+                    dummy_model = RBFmodel(
                         X_train, y_train, C=C_train, dy=dy_train)
                     dummy_model.GO_fit(X_GO, y_GO, epsi=e)
 
@@ -776,79 +541,3 @@ class Preprocessing:
             model.dy = model.dy @ model.evec / model.scalers
 
         return
-
-# %%% Test code
-
-# Define the actual function to be modeled
-
-
-if __name__ == '__main__':
-
-    def actual_function(x, y):
-        return np.sin(0.1*np.pi * x) + np.sin(np.pi * y)
-
-    def grad_function(x, y):
-        dx = 0.1*np.pi*np.cos(0.1*np.pi*x).reshape(-1, 1)
-        dy = np.pi*np.cos(np.pi*y).reshape(-1, 1)
-        return np.hstack((dx, dy))
-
-    # Create a meshgrid of x and y values
-    x = np.linspace(-1, 1, 100)
-    y = np.linspace(-1, 1, 100)
-    X, Y = np.meshgrid(x, y)
-
-    # Calculate the corresponding z values using the actual function
-    Z_actual = actual_function(X, Y)
-    dZ_actual = grad_function(X, Y)
-
-    # Train the model using some training data
-    train_X = lhs(2, samples=10, criterion='m')*2.1 - 1.05
- 
-    train_Y = actual_function(train_X[:, 0], train_X[:, 1]).reshape(-1, 1)
-    train_dy = grad_function(train_X[:, 0], train_X[:, 1])
-
-    # Create an instance of the RBFModel clas
-    #train_dy = None
-    model = RBFModel(train_X, train_Y, dy=train_dy)
-
-    Preprocessing.Transform(model, method='GE-LHM')
-
-    
-    opt_epsi = Preprocessing.GradientErrors(model, epsi_range = np.logspace(-1,1,100), fig=True)
-
-    #model.GO_fit(train_X[[2], :], train_Y[2], epsi=opt_epsi)
-    model.GE_fit(epsi=opt_epsi)
-    # model.FV_fit(epsi=opt_epsi)
-
-    # Generate predictions using the trained model
-    Z_predicted = model(np.column_stack((X.flatten(), Y.flatten())))
-    Z_predicted, dZ_predicted = Z_predicted[0].reshape(X.shape), Z_predicted[1]
-
-    error = np.round(np.mean((Z_actual - Z_predicted)**2), 4)
-
-    # Create the 3D plot
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
-
-    # Plot the actual function
-    ax.plot_surface(X, Y, Z_actual, alpha=0.5)
-
-    # Plot the RBFModel predictions
-    ax.plot_surface(X, Y, Z_predicted, alpha=0.8)
-
-    # Set plot labels and legend
-    ax.set_xlabel('X')
-    ax.set_ylabel('Y')
-    ax.set_zlabel('Z')
-    ax.set_title(f'Error {error}')
-
-    # Show the plot
-    plt.show()
-    
-#%%
-
-
-
-
-
-
