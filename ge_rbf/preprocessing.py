@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from rbfmodels import RBFmodel
+from rbf_models import RBFmodel
 from scipy.spatial.distance import cdist
 
 class Preprocessing:
