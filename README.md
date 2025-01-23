@@ -6,6 +6,7 @@ Radial Basis Functions (RBF) surrogate modeling strategies developed and impleme
 2. [Shape-Parameter Selection Strategies](#shape-parameter-selection-strategies)
 3. [Key Contributions](#key-contributions)
 4. [Usage](#usage)
+5. [Documentation](#documentation)
 
 ## Implemented Models
 The code includes three types of RBF models in <mark>rbfmodels.py:
@@ -53,7 +54,4 @@ Uses function values to estimate local Hessians and define the transformation.
   
 ## Documentation
 
-### <mark>rbf_models.py
-
-#### __init__.py
-- X 
+Documentation can be found in the <mark>Documentation.md file.
