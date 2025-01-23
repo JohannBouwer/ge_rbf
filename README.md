@@ -5,6 +5,7 @@ Radial Basis Functions (RBF) surrogate modeling strategies developed and impleme
 1. [Implemented Models](#implemented-models)
 2. [Shape-Parameter Selection Strategies](#shape-parameter-selection-strategies)
 3. [Key Contributions](#key-contributions)
+4. [Usage](#usage)
 
 ## Implemented Models
 The code includes three types of RBF models in <mark>rbfmodels.py:
@@ -43,3 +44,16 @@ Constructs the transformation using gradient information to approximate local cu
 
 ### 3. Function-Based Local Hessian Method (FV LHM)
 Uses function values to estimate local Hessians and define the transformation.
+
+## Usage
+
+-> Model Training: Examples of how to implement, train, and sample from the models are found in the Model_Examples.ipynb notebook.
+-> Hyperparameter Selection: Examples of how to use the shape parameter selction methods are found in the  Preprocessing_Examples.ipynb notebook.
+-> Referance Frame Transforamtions: Examples of how to use the novel isotropic transformation schemes are found in the  _.ipynb notebook.
+  
+## Documentation
+
+### <mark>rbf_models.py
+
+#### __init__.py
+- X 
