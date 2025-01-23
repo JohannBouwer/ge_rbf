@@ -1,19 +1,41 @@
-# RBF Surrogate Models
+# GE RBF
 
 [Code Docs](Code%20Docs%20867e4dd80a0c4567bff85a8b6d2907cd.csv)
 
 [Documentation](https://www.notion.so/Documentation-ace68552f8e64f459334c0854cd471fb?pvs=21)
 
-# Radial Basis Functions
+# Documentation
 
-Shape parameter selection using sampled gradient information.
-
-> 📘 The goal is too use the gradient information to improve the selection of hyper-parameters.
+> 📘 The main purpose of this code is to use sampled gradient information to construct radial basis function models. Typically, these models are only trained with function value information, instead, in this implementation the gradient information is used in fitting the model, hyper-parameter selection, and preprocessing the data.
 > 
-> - Implement a iteration loop where the shape parameters are..
-> - Use the gradient information to find the error associated with the shape parameter in each direction.
 
-## Capabilities
+## Model Details
+
+### The Kernel
+
+The guassain kernel is the chosen implemented kernel, where $\epsilon$ or`epsi` is the shape hype-parameter. 
+
+<aside>
+
+$$
+\phi(\mathbf{x}, \mathbf{c}, \epsilon) = e^{\epsilon||\mathbf{x} - \mathbf{c}||^2}
+$$
+
+</aside>
+
+### The Kernel Jacobian
+
+To fit to sampled gradient information, the gradient of the guassain kernel with respect to the input variables `X` is required. This also allows for the model to predict gradient information.
+
+<aside>
+
+$$
+\frac{d\phi(\mathbf{x}, \mathbf{c}, \epsilon)}{d\mathbf{x}} = -2 \epsilon (\mathbf{x} - \mathbf{c}) e^{\epsilon||\mathbf{x} - \mathbf{c}||^2}
+$$
+
+</aside>
+
+## Model Capabilities
 
 | Model | Fit to Function Values | Fit to gradient vectors |
 | --- | --- | --- |
@@ -21,135 +43,97 @@ Shape parameter selection using sampled gradient information.
 | GE - RBF | ✅ | ✅ |
 | GO - RBF | ❌ | ✅ |
 
-| Pre-processing | Uncoupled Rotation | Isotropic Scaling |
+| Hyper-parameter Selection Strategies | Function Value Based | Gradient Information Based |
+| --- | --- | --- |
+| Cross validation Kfold | ✅ | ✅ |
+| Validation Set | ✅ | ❌ |
+| Gradient Validation | ❌ | ✅ |
+
+| Preprocessing | Uncoupled Rotation | Isotropic Scaling |
 | --- | --- | --- |
 | ASM | ✅ | ❌ |
-| LHM | ✅ | ✅ |
+| GE LHM | ✅ | ✅ |
+| FV LHM | ✅ | ✅ |
 
-| Shape Selection Strategies | Direction Interdependence | Kernel Independence |
-| --- | --- | --- |
-| tbd | ✅ | ❌ |
-| tbd | ❌ | ✅ |
-| tbd | ✅ | ✅ |
+## Model Initialization
 
-## The Constructor
+Initialize the model with the sampled data.
 
-Set the model parameters:   `X` `y` `dy` `centres` 
-
-[The Constructor](https://www.notion.so/The-Constructor-9a0afb14bd4245129b896d3815ce64bb?pvs=21)
-
-### Parameters
+**Input Parameters**
 
 | Property | Type | Description | Default |
 | --- | --- | --- | --- |
-| `X` | `numpy` Matrix | Locations of sampled information. | - |
-| `y` | `numpy` vector | Sampled function value information. | - |
+| `X` | `numpy`Matrix   | Locations of sampled information. | - |
+| `y` | `numpy`vector | Sampled function value information. | - |
 | `dy` | `numpy` Matrix | Sampled gradient information. | `None` |
 | `centres` | `numpy` Matrix | Locations of the kernel functions. | `None` ; Set to `X` |
 
-## The Kernel
+## Model Fitting
 
-We want to input a vector of `epsi` values so that:
+Find the optimum coefficients for the different model types.
 
-1. Each Kernel has its own shape parameter
-2. Each direction has its own shape parameter.
-3. Both are independent.
+### Function value fit
 
-<aside>
+**Input Parameters**
 
-$$
-\phi(\mathbf{x}, \mathbf{c}, \epsilon) = e^{\epsilon||\mathbf{x} - \mathbf{c}||^2}
-$$
+| Property | Type | Description | Default |
+| --- | --- | --- | --- |
+| `self` | `RBFmodel`  | Instance of the rbf model. | - |
+| `epsi` | `float` scalar | Shape parameter for the gaussian kernels | 1 |
 
-</aside>
+```python
+def FV_fit(self, epsi = 1):
 
-[The Kernel Method](https://www.notion.so/The-Kernel-Method-63250203e1f5441987e9d0e01ee51b3a?pvs=21)
+	return
+```
 
-## The Kernel Jacobian
+### Gradient Enhanced Fit
 
-We want the gradient of the output variable `y` with respect to the in the input variables `X`. 
+**Input Parameters**
 
-<aside>
+| Property | Type | Description | Default |
+| --- | --- | --- | --- |
+| `self` | `RBFmodel`  | Instance of the rbf model. | - |
+| `epsi` | `float` scalar | Shape parameter for the gaussian kernels | 1 |
 
-$$
-\phi(\mathbf{x}, \mathbf{c}, \epsilon) = e^{\epsilon||\mathbf{x} - \mathbf{c}||^2}
-$$
+```python
+def GE_fit(self, epsi = 1):
 
-</aside>
+	return
+```
 
-[The Kernel Jacobian](https://www.notion.so/The-Kernel-Jacobian-28921d72472c4b0682563411e11ab3c1?pvs=21)
+### Gradient Only Fit
 
-## Fitting the Model
+**Input Parameters**
 
-Find the optimum coefficients of the model
+| Property | Type | Description | Default |
+| --- | --- | --- | --- |
+| `self` | `RBFmodel`  | Instance of the rbf model. | - |
+| `epsi` | `float` scalar | Shape parameter for the gaussian kernels | 1 |
 
-[Fit the Model](https://www.notion.so/Fit-the-Model-c7bdb8e0c89c427db1f43ae67eec1c03?pvs=21)
+```python
+def GO_fit(self, epsi = 1):
 
-## Predict Function Values
+	return
+```
 
-Predict values at new data points
+## Model Prediction
 
-[Predict](https://www.notion.so/Predict-ab2bdd90be6544939564ebe5161a09b4?pvs=21)
+Predict function and gradient information at new data points
 
-## Predict Gradients
+**Input Parameters**
 
-[Predict Gradients](https://www.notion.so/Predict-Gradients-f546ca4f725345e5b11e7d1bb1f01fda?pvs=21)
+| Property | Type | Description | Default |
+| --- | --- | --- | --- |
+| `self` | `RBFmodel`  | Instance of the RBF model. | - |
+| `Xnew` | `numpy` Matrix | Locations where the model needs to make predictions | - |
+| `OnlyFunc` | `boolean` | Specify in the model should only predict function information | `False` |
 
-## Shape Parameter Selection
+```python
+def __call__(self, Xnew, OnlyFunc = False):
 
-[Shape Parameter Selection](https://www.notion.so/Shape-Parameter-Selection-df91b14f0ef2450ead3610129095b732?pvs=21)
-
-## Quick Copies
-
-- **Variable types**
-    - `None`
-    - `string`
-    - `int`
-    - `signed`
-    - `unsigned`
-    - `float`
-    - `boolean`
-    - `true`
-    - `false`
-    - `list`
-    - `array`
-    - `tuple`
-    - `range`
-    - `dict`
-    - `complex`
-    - `bytes`
-    - `set`
-- **Pie chart**
-    
-    ```mermaid
-    %%{init: {'theme': 'default'} }%%
-    pie title Common Error Codes
-    	"301" : 30
-    	"404" : 40
-    	"503" : 30
-    ```
-    
-- **Flow chart**
-    
-    ```mermaid
-    flowchart LR
-    	I[(Idea)] ---> C(Code)
-    	C ---> R(Review)
-    	R --> I
-    ```
-    
-- **Mathematical Equations**
-    
-    *Inline Equation:* $F=G\frac{m_1m_2}{d^2}$
-    
-    *Inline Equation:* $F=G\frac{m_1m_2}{d^2}$
-    
-    *Block equation:*
-    
-    $$
-    \frac{df}{dt}=\lim_{h\to 0} \frac{f(t+h)-f(t)}{h}
-    $$
-    
+	return
+```
 
 Table of Contents
 
