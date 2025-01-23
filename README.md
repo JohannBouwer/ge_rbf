@@ -47,9 +47,9 @@ Uses function values to estimate local Hessians and define the transformation.
 
 ## Usage
 
-- Model Training &rarr; Examples of how to implement, train, and sample from the models are found in the Model_Examples.ipynb notebook.
-- Hyperparameter Selection &rarr; Examples of how to use the shape parameter selction methods are found in the  Preprocessing_Examples.ipynb notebook.
-- Referance Frame Transforamtions &rarr; Examples of how to use the novel isotropic transformation schemes are found in the  _.ipynb notebook.
+- **Model Training** &rarr; Examples of how to implement, train, and sample from the models are found in the Model_Examples.ipynb notebook.
+- **Hyperparameter Selection** &rarr; Examples of how to use the shape parameter selction methods are found in the  Preprocessing_Examples.ipynb notebook.
+- **Referance Frame Transformations** &rarr; Examples of how to use the novel isotropic transformation schemes are found in the  _.ipynb notebook.
   
 ## Documentation
 
