@@ -131,17 +131,22 @@ class HyperParameterSelection:
             
         epsi_range = epsi_range[condition <= Max_cond]
         e_metrics = e_metrics[condition <= Max_cond]
+        
+        opt_epsi = epsi_range[np.argmin(e_metrics)]
 
+        #plot error vs shape parameter
         if fig:
             plt.figure()
             plt.loglog(epsi_range[::-1], e_metrics[::-1])
-
-        opt_epsi = epsi_range[np.argmin(e_metrics)]
+            plt.xlabel('Shape Parameter')
+            plt.ylabel('Relative Error')
+            plt.title('Log of Error vs Shape Parameter')
+            plt.loglog(opt_epsi, np.min(e_metrics), 'k.')
 
         return opt_epsi
     
     @staticmethod
-    def validation_set(Xvaild, y_actual, model, 
+    def validation_set(model, Xvaild, y_actual,
                   Max_cond = 1e12,
                   fig = False,
                   Type = 'GE',
@@ -149,12 +154,12 @@ class HyperParameterSelection:
         '''
         Parameters
         ----------
+        model : rbf_model instance
+            instance of the rbf model.
         Xvaild : numpy array
             locations of the validation set in the design space.
         y_actual : numpy array
             function target values for the model.
-        model : rbf_model instance
-            instance of the rbf model.
         Max_cond : float, optional
             max conditional value of the kernel matrix. The default is 1e12.
         fig : boolean, optional
@@ -187,15 +192,15 @@ class HyperParameterSelection:
             error[i] = np.linalg.norm(model(Xvaild, OnlyFunc = True) - y_actual)/np.linalg.norm(y_actual)
             condition[i] = model.cond
             
-        epsi = epsi_range[np.argmin(error)]
+        opt_epsi = epsi_range[np.argmin(error)]
         #train the model with the optimin shape parameter
         if Type =='GE':
             
-            model.GE_fit(epsi)
+            model.GE_fit(opt_epsi)
             
         if Type == 'FV':
             
-            model.FV_fit(epsi)
+            model.FV_fit(opt_epsi)
         
         epsi_range = epsi_range[condition <= Max_cond]
         error = error[condition <= Max_cond]
@@ -203,8 +208,12 @@ class HyperParameterSelection:
         if fig:
             plt.figure()
             plt.loglog(epsi_range[::-1], error[::-1])
+            plt.xlabel('Shape Parameter')
+            plt.ylabel('Relative Error')
+            plt.title('Log of Error vs Shape Parameter')
+            plt.loglog(opt_epsi, np.min(error), 'k.')
 
-        return epsi
+        return opt_epsi
     
     @staticmethod
     def gradient_validation(model, epsi_range = np.logspace(-2,1,100), fig = False, Type = 'GE'):
@@ -252,7 +261,10 @@ class HyperParameterSelection:
         #plot error vs shape parameter
         if fig:
             plt.figure()
-            plt.loglog(epsi_range, error)
+            plt.loglog(epsi_range[::-1], error[::-1])
+            plt.xlabel('Shape Parameter')
+            plt.ylabel('Relative Error')
+            plt.title('Log of Error vs Shape Parameter')
             plt.loglog(opt_epsi, np.min(error), 'k.')
             
         return opt_epsi
