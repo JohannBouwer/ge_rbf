@@ -3,8 +3,12 @@ import matplotlib.pyplot as plt
 from rbf_models import RBFmodel
 from scipy.spatial.distance import cdist
 
-class Preprocessing:
-
+class HyperParameterSelection:
+    '''
+    Methods to select the shape parameter for the rbf model.
+    '''
+    
+    @staticmethod
     def kfold(model, k=5, Type='GE', 
               epsi_range = np.logspace(-2,1,50),
               Max_cond = 1e13,
@@ -136,42 +140,80 @@ class Preprocessing:
 
         return opt_epsi
     
-    def VaildEpsi(points, actual, model, 
+    @staticmethod
+    def validation_set(Xvaild, y_actual, model, 
                   Max_cond = 1e12,
                   fig = False,
                   Type = 'GE',
                   epsi_range = np.logspace(-1,1,50)):
+        '''
+        Parameters
+        ----------
+        Xvaild : numpy array
+            locations of the validation set in the design space.
+        y_actual : numpy array
+            function target values for the model.
+        model : rbf_model instance
+            instance of the rbf model.
+        Max_cond : float, optional
+            max conditional value of the kernel matrix. The default is 1e12.
+        fig : boolean, optional
+            plot the error vs shape parameter (log domain). The default is False.
+        Type : string, optional
+            What type of model to fit. The default is 'GE'. Options are FV, GE.
+        epsi_range : numpy array, optional
+            shape aprameter values to trail. The default is np.logspace(-1,1,50).
+
+        Returns
+        -------
+        epsi : float
+            Optimial shape parameter for the model.
+
+        '''
         
         error = np.zeros_like(epsi_range)
         condition = np.zeros_like(error)
+        #calculate error for each shape parameter
         for i,e in enumerate(epsi_range):
             
             if Type =='GE':
-                model.GE_fit(e)
-            else:
-                model.FV_fit(e)
                 
-            error[i] = np.mean((model(points, OnlyFunc = True) - actual)**2)
+                model.GE_fit(e)
+                
+            if Type == 'FV':
+                
+                model.FV_fit(e)
+            
+            error[i] = np.linalg.norm(model(Xvaild, OnlyFunc = True) - y_actual)/np.linalg.norm(y_actual)
             condition[i] = model.cond
             
         epsi = epsi_range[np.argmin(error)]
+        #train the model with the optimin shape parameter
+        if Type =='GE':
+            
+            model.GE_fit(epsi)
+            
+        if Type == 'FV':
+            
+            model.FV_fit(epsi)
         
         epsi_range = epsi_range[condition <= Max_cond]
         error = error[condition <= Max_cond]
-
+        #plot error vs shape parameter
         if fig:
             plt.figure()
             plt.loglog(epsi_range[::-1], error[::-1])
 
-       
         return epsi
     
-    def GradientErrors(model, epsi_range = np.logspace(-2,1,100), fig = False, FuncFit = False):
+    @staticmethod
+    def gradient_validation(model, epsi_range = np.logspace(-2,1,100), fig = False, Type = 'GE'):
         '''
         Parameters
         ----------
-        model : model from RBFModel class.
-        epsi_range : np.array, optional
+        model : rbf_model instance
+            instance of the rbf model.
+        epsi_range : numpy array, optional
             shape parameters to check. The default is np.logspace(-2,1,100).
         fig : boolen, optional
             plot a error graph. The default is False.
@@ -183,32 +225,31 @@ class Preprocessing:
         optimum shape parameter value.
 
         '''
-        
+        #calculate error for each shape parameter
         error = np.zeros_like(epsi_range)
         for i,e in enumerate(epsi_range):
             
-            if FuncFit:
+            if Type == 'FV':
                 
                 model.FV_fit(epsi = e)
                 
-            else:
+            if Type == 'GE':
                 
                 model.GE_fit(epsi = e)
             
             error[i] = np.linalg.norm(model.dy_org - model(model.X_org)[1])/np.linalg.norm(model.dy_org)
-            #error[i] = np.sum(model.y - model(model.X)) + np.sum((model.dy_org - model(model.X)[1])**2)**0.5
-            
-        
+  
         opt_epsi = epsi_range[np.argmin(error)]
-        
-        if FuncFit:
+        #train the model with the optimin shape parameter
+        if Type == 'FV':
             
             model.FV_fit(epsi = opt_epsi)
             
-        else:
+        if Type == 'GE':
             
             model.GE_fit(epsi = opt_epsi)
         
+        #plot error vs shape parameter
         if fig:
             plt.figure()
             plt.loglog(epsi_range, error)
@@ -217,13 +258,19 @@ class Preprocessing:
         return opt_epsi
         
 
+class LinearTransformation:
+    '''
+    Linear transformations to create an isotropic reference frame for model construction.
+    '''
+    
+    @staticmethod
     def ASM(model):
         """
         Complete the active subspace method.
 
         Parameters:
-        model : object
-            Instance of the RBFModel class.
+        model : rbf_model instance
+            instance of the rbf model.
 
         Returns:
         c_approx : np.ndarray
@@ -242,15 +289,16 @@ class Preprocessing:
         model.eig, model.evec = np.linalg.eigh(C_approx)
 
         return C_approx
-
+    
+    @staticmethod
     def GE_LHM(model, n_neighbors=None):
         """
         Computes a Symmetric Rank-One (SR1) Hessian approximation for each point in X
         using the n_neighbors+1 closest points.
 
         Parameters:
-        model : object
-            Instance of the RBFModel class.
+        model : rbf_model instance
+            instance of the rbf model.
         n_neighbors : int, optional
             Number of neighbors. Default is None, which sets it to n_features + 1.
 
@@ -309,10 +357,24 @@ class Preprocessing:
         H_mean = np.median(np.round(hessian, 10), axis=0)
 
         model.eig, model.evec = np.linalg.eig(H_mean)
-        # print(model.eig)
-        return H_mean
 
+        return H_mean
+    
+    @staticmethod
     def FV_LHM(model):
+        """
+        Computes function quadratic fit to complete a Hessian approximation for each point in X
+        using the n_neighbors+1 closest points.
+
+        Parameters:
+        model : rbf_model instance
+            instance of the rbf model.
+
+        Returns:
+        h_mean : np.ndarray
+            The approximation of the average local Hessian.
+            Also adds the eigenvalues and vectors as attributes to the model object.
+        """
 
         from sklearn.metrics.pairwise import euclidean_distances
         from itertools import combinations
@@ -389,117 +451,22 @@ class Preprocessing:
 
         return Ha
     
-    def SP_LHM(model, SpaceSamples, min_step, n_neighbors=None):
-        '''
-        Complete the LHM method in the space-time sampling case.
-        The 'time' domain is scaled for a better Hessain approximation.
-        
-        Parameters
-        ----------
-        SpaceSamples: The samples locations in the space domain.
-        min_step: Minium, step the solver can take
-        n_neighbors : TYPE, optional
-            DESCRIPTION. The default is None.
-            
-
-        Returns
-        -------
-        H: TYPE
-            DESCRIPTION.
-
-        '''
-        
-        dist_matrix = cdist(SpaceSamples, SpaceSamples, metric='euclidean')
-        dist_matrix = np.sort(dist_matrix, axis=1)
-        
-        c = np.mean(dist_matrix[:,SpaceSamples.shape[1]+1])
-        #c = np.mean(dist_matrix[:,2])
-        
-        s = np.ones(model.X.shape[1])
-        
-        s[-1] = c/(min_step)
-        
-        n_samples, n_features = model.X.shape
-        if n_neighbors is None:
-            n_neighbors = n_features + 1
-        
-        # Initialize the SR1 Hessian approximations to the identity matrix
-        hessian = np.zeros(
-            (model._n_samples, model._n_features, model._n_features))
-        for i in range(model._n_samples):
-            hessian[i] = np.eye(model._n_features)
-        
-        # Compute the SR1 Hessian approximation for each point
-        dist_matrix = cdist(model.X * s, model.X * s, metric='euclidean')
-        closest_indices = np.argsort(dist_matrix, axis=1)[:, 1:n_neighbors+1]
-        
-        '''
-        fig = plt.figure(figsize = (8,8))
-        ax = fig.add_subplot(111, projection = '3d')
-        ax.scatter(*model.X.T, 'k.')
-        
-        for i in np.random.randint(0, model.X.shape[0], size = (4)):
-            
-            for j in closest_indices[i][::-1]:
-                
-                ax.plot([model.X[i, 0], model.X[j, 0]],
-                        [model.X[i, 1], model.X[j, 1]], 
-                        [model.X[i, 2], model.X[j, 2]], 'r--')
-              '''
-        
-        for i in range(model._n_samples):
-        
-            hessian[i] = model.dy[[i], :].T @ model.dy[[i], :]
-        
-            for j in closest_indices[i][::-1]:
-        
-                DeltaX = model.X[[j], :].T - model.X[[i], :].T
-        
-                DeltaJac = model.dy[[j], :].T - model.dy[[i], :].T
-        
-                Term = (DeltaJac - hessian[i] @ DeltaX)
-                
-                if ((Term > -1e-6) & (Term < 1e-6)).any():
-                    
-                    break
-                #DeltaX[DeltaX == 0] = 1
-                hessian[i] += (Term @ Term.T)/(Term.T @ DeltaX)
-        
-        for i, h in enumerate(hessian):
-            
-            eig, evec = np.linalg.eig(h)
-        
-            if np.any(np.iscomplex(eig)):
-
-                hessian[i] = np.identity(n_features)
-
-            else:
-
-                hessian[i] = evec @ np.diag(abs(eig)) @ evec.T
-        
-        H_mean = np.median(np.round(hessian, 10), axis=0)
-        
-        model.eig, model.evec = np.linalg.eig(H_mean)
-        # print(model.eig)
-        return H_mean
-
-
+    @staticmethod
     def Transform(model, method='GE-LHM', n_neighbors=None, 
-                                          R=None, S=None,
-                                          space_samples=None, min_step=None):
+                                          R=None, S=None):
         """
         Transforms the model according to a chosen method.
 
         Parameters:
-        model : object
-            Instance of the RBFModel class.
-        method : str, optional
+        model : rbf_model instance
+            instance of the rbf model.
+        method : string, optional
             Which transformation method to use. Default is 'GE-LHM'.
         n_neighbors : int, optional
-            Neighbours for LHM methods. Default is None.
-        R : np.ndarray, optional
+            Neighbours for LHM methods. Default is None, set to n+1
+        R : numpy array, optional
             User-defined rotation matrix. Default is None.
-        S : np.ndarray, optional
+        S : numpy array, optional
             User-defined scalers. Default is None.
 
         Returns:
@@ -507,28 +474,24 @@ class Preprocessing:
         """
 
         if method == 'GE-LHM':
-            Preprocessing.GE_LHM(model, n_neighbors=n_neighbors)
+            LinearTransformation.GE_LHM(model, n_neighbors=n_neighbors)
         
-        if method == 'SP-GE-LHM':
-            Preprocessing.SP_LHM(model, space_samples, min_step, n_neighbors=n_neighbors)
-
         if method == 'GE-DLHM':
-            H = Preprocessing.GE_LHM(model, n_neighbors=n_neighbors)
+            H = LinearTransformation.GE_LHM(model, n_neighbors=n_neighbors)
 
             model.eig, model.evec = np.diag(H), np.identity(model._n_features)
 
         if method == 'FV-LHM':
-            Preprocessing.FV_LHM(model)
+            LinearTransformation.FV_LHM(model)
 
         if method == 'ASM':
-            Preprocessing.ASM(model)
+            LinearTransformation.ASM(model)
 
         if method == 'ideal':
             model.evec = R
             model.eig = S
             
         model.scalers = model.eig**0.5 
-        #model.scalers /= model.scalers[-1]
  
         model.X_org = np.copy(model.X)
         model.X = model.X @ model.evec * model.scalers
