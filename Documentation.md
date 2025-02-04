@@ -1,4 +1,4 @@
-# GE RBF
+# ge_rbf
 
 [Code Docs](Code%20Docs%20867e4dd80a0c4567bff85a8b6d2907cd.csv)
 
@@ -8,6 +8,7 @@
 
 > 📘 The main purpose of this code is to use sampled gradient information to construct radial basis function models. Typically, these models are only trained with function value information, instead, in this implementation the gradient information is used in fitting the model, hyper-parameter selection, and preprocessing the data.
 > 
+- Table of Contents
 
 ## Model Details
 
@@ -70,7 +71,7 @@ Initialize the model with the sampled data.
 
 ## Model Fitting
 
-Find the optimum coefficients for the different model types.
+Find the optimum model coefficients for the different model types.
 
 ### Function value fit
 
@@ -119,7 +120,7 @@ def GO_fit(self, epsi = 1):
 
 ## Model Prediction
 
-Predict function and gradient information at new data points
+Predict function and gradient information at new data points.
 
 **Input Parameters**
 
@@ -134,7 +135,5 @@ def __call__(self, Xnew, OnlyFunc = False):
 
 	return
 ```
-
-Table of Contents
 
 ---
