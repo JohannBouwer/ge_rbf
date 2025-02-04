@@ -1,5 +1,5 @@
 [project]
-name = "ge-rbf"
+name = "ge_rbf"
 version = "0.1.0"
 description = "Implementation of research done during PhD"
 authors = [
