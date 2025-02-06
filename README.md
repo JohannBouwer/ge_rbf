@@ -55,6 +55,6 @@ The user can specify a rotation and scaling if a know ideal reference frame exis
 - **Hyperparameter Selection** &rarr; Examples of how to use the shape parameter selction methods are found in the  Hyper_Parameter.ipynb notebook.
 - **Referance Frame Transformations** &rarr; Examples of how to use the novel isotropic transformation schemes are found in the  Linear_Transformation.ipynb notebook.
   
-## Documentation
+## Test Problems
 
-Documentation can be found in the <mark>Documentation.md file.
+Various common optimiasation test problem can be found in the <mark>test_problems.py file.
