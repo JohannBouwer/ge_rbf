@@ -6,7 +6,7 @@ Radial Basis Functions (RBF) surrogate modeling strategies developed and impleme
 2. [Shape-Parameter Selection Strategies](#shape-parameter-selection-strategies)
 3. [Key Contributions](#key-contributions)
 4. [Usage](#usage)
-5. [Documentation](#documentation)
+5. [Test Problems](#test-problems)
 
 ## Implemented Models
 The code includes three types of RBF models in <mark>rbfmodels.py:
@@ -57,4 +57,4 @@ The user can specify a rotation and scaling if a know ideal reference frame exis
   
 ## Test Problems
 
-Various common optimiasation test problem can be found in the <mark>test_problems.py file.
+Various common optimiasation test problems can be found in the <mark>test_problems.py file.
