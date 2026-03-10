@@ -480,6 +480,7 @@ source = { editable = "." }
 dependencies = [
     { name = "matplotlib" },
     { name = "numpy" },
+    { name = "pydoe" },
     { name = "scipy" },
 ]
 
@@ -500,6 +501,7 @@ requires-dist = [
     { name = "jupyter", marker = "extra == 'notebooks'" },
     { name = "matplotlib", specifier = ">=3.10.0,<4.0.0" },
     { name = "numpy", specifier = ">=2.2.2,<3.0.0" },
+    { name = "pydoe", specifier = ">=0.9.7" },
     { name = "pydoe2", marker = "extra == 'notebooks'" },
     { name = "scipy", specifier = ">=1.15.1,<2.0.0" },
 ]
@@ -1499,6 +1501,19 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/1b/7d/92392ff7815c21062bea51aa7b87d45576f649f16458d78b7cf94b9ab2e6/pycparser-3.0.tar.gz", hash = "sha256:600f49d217304a5902ac3c37e1281c9fe94e4d0489de643a9504c5cdfdfc6b29", size = 103492 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/0c/c3/44f3fbbfa403ea2a7c779186dc20772604442dde72947e7d01069cbe98e3/pycparser-3.0-py3-none-any.whl", hash = "sha256:b727414169a36b7d524c1c3e31839a521725078d7b2ff038656844266160a992", size = 48172 },
+]
+
+[[package]]
+name = "pydoe"
+version = "0.9.7"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+    { name = "scipy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/62/6f/4e109a8963870bc20f19eeae57ccaee5d7c041d7c396f9348881f75bdde4/pydoe-0.9.7.tar.gz", hash = "sha256:73eafc0add07349111189db58fbec3cf435b88ea9bfcd6c9a0903e2db275fc26", size = 1656156 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/77/af/5815cf0791c6b0e50590728717e1cef6d822499c7bf48a4ad4c1c67b73d3/pydoe-0.9.7-py3-none-any.whl", hash = "sha256:3a4bd1fd8bcb3f7485de6b4a386e667c1a410889f32823f185bd12bbeaa6a20e", size = 73619 },
 ]
 
 [[package]]
