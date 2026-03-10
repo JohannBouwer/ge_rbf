@@ -3,20 +3,31 @@ name = "ge_rbf"
 version = "0.1.0"
 description = "Implementation of research done during PhD"
 authors = [
-    {name = "JohannBouwer",email = "68966619+JohannBouwer@users.noreply.github.com"}
+    {name = "JohannBouwer", email = "68966619+JohannBouwer@users.noreply.github.com"}
 ]
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "numpy (>=2.2.2,<3.0.0)",
-    "scipy (>=1.15.1,<2.0.0)",
-    "matplotlib (>=3.10.0,<4.0.0)"
+    "numpy>=2.2.2,<3.0.0",
+    "scipy>=1.15.1,<2.0.0",
+    "matplotlib>=3.10.0,<4.0.0",
 ]
 
+[project.optional-dependencies]
+notebooks = [
+    "pyDOE2",
+    "jupyter",
+]
 
 [build-system]
-requires = ["poetry-core>=2.0.0,<3.0.0"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
-[[tool.poetry.packages]]
-include = "ge_rbf"
+[tool.hatch.build.targets.wheel]
+packages = ["src/ge_rbf"]
+
+[tool.uv]
+dev-dependencies = [
+    "pyDOE2",
+    "jupyter",
+]
