@@ -102,6 +102,19 @@ def test_rejected_candidates_are_dropped_from_the_result(sampled):
     assert result.scores.size == result.epsilons.size == result.conditions.size
 
 
+def test_a_singular_candidate_is_rejected_rather_than_raising(sampled):
+    """Very wide basis functions make the system singular; a sweep must survive that."""
+    X, y, _ = sampled
+    # 1e-6 is wide enough that every centre looks alike to working precision.
+    epsilons = np.concatenate([[1e-6], EPSILONS])
+
+    result = kfold_search(RBFRegressor(), X, y, epsilons=epsilons, random_state=0)
+
+    assert result.rejected >= 1
+    assert 1e-6 not in result.epsilons
+    assert np.all(np.isfinite(result.scores))
+
+
 def test_rejecting_everything_is_an_error_not_a_silent_empty_result(sampled):
     X, y, dy = sampled
 

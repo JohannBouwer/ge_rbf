@@ -120,6 +120,7 @@ def kfold_search(
         Candidate shape parameters.
     max_condition : float, optional
         Candidates whose full-data system is worse conditioned than this are rejected.
+        Candidates whose system is singular to working precision are always rejected.
     refit : bool, optional
         Fit a model on all the data at the winning shape parameter and return it as
         ``best_estimator``.
@@ -300,13 +301,20 @@ def _search(
     conditions = np.empty(epsilons.size)
 
     for i, epsilon in enumerate(epsilons):
-        scores[i] = score(epsilon)
-        conditions[i] = _fit(estimator, epsilon, X, y, gradients).condition_
+        try:
+            conditions[i] = _fit(estimator, epsilon, X, y, gradients).condition_
+            scores[i] = score(epsilon)
+        except np.linalg.LinAlgError:
+            # Wide basis functions make every centre look alike, and past some point the
+            # system is singular to working precision. That is a candidate to discard, not
+            # an error to propagate out of a sweep.
+            conditions[i] = np.inf
+            scores[i] = np.inf
 
     # Reject ill-conditioned candidates *before* choosing the winner. The previous
     # implementation applied this filter only when drawing the diagnostic plot, so
     # max_condition had no effect on the value it returned.
-    keep = conditions <= max_condition
+    keep = np.isfinite(conditions) & (conditions <= max_condition)
     rejected = int((~keep).sum())
 
     if not keep.any():
