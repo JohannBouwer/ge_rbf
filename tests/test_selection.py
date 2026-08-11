@@ -94,6 +94,21 @@ def test_max_condition_changes_which_shape_parameter_wins(sampled, validation):
     assert np.all(strict.conditions <= 1e4)
 
 
+def test_reported_conditions_match_a_direct_fit(sampled, validation):
+    """Searches that already fit the full-data model reuse its condition number.
+
+    They must report exactly what an independent fit at the same epsilon would give,
+    whether the number came from the scoring fit or from a separate one.
+    """
+    X, y, dy = sampled
+    X_valid, y_valid = validation
+
+    for result in all_searches(X, y, dy, validation, max_condition=np.inf):
+        for epsilon, condition in zip(result.epsilons, result.conditions, strict=True):
+            direct = RBFRegressor(epsilon=epsilon).fit(X, y, dy=dy)
+            assert condition == pytest.approx(direct.condition_, rel=1e-12)
+
+
 def test_rejected_candidates_are_dropped_from_the_result(sampled):
     X, y, dy = sampled
     result = gradient_search(RBFRegressor(), X, y, dy, epsilons=EPSILONS, max_condition=1e6)

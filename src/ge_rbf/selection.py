@@ -26,8 +26,9 @@ were silently working with a mis-fitted surrogate.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
@@ -142,7 +143,7 @@ def kfold_search(
     splitter = KFold(n_splits=k, shuffle=True, random_state=random_state)
     folds = list(splitter.split(X))
 
-    def score(epsilon: float) -> float:
+    def score(epsilon: float) -> tuple[float, None]:
         errors = []
         for train, validate in folds:
             train_gradients = None if gradients is None else gradients[train]
@@ -158,7 +159,9 @@ def kfold_search(
                     balance * _rmse(y_values[validate], predicted)
                     + _rmse(gradients[validate], fitted.predict_gradient(X[validate]))
                 )
-        return float(np.mean(errors))
+        # None: the fold models say nothing about the conditioning of the full-data
+        # system, so _search has to fit that separately.
+        return float(np.mean(errors)), None
 
     return _search(estimator, X, y_values, gradients, epsilons, max_condition, refit, score)
 
@@ -200,9 +203,9 @@ def validation_search(
     X_valid = check_samples(X_valid, name="X_valid")
     y_valid_values, _ = check_targets(y_valid, X_valid.shape[0], name="y_valid")
 
-    def score(epsilon: float) -> float:
+    def score(epsilon: float) -> tuple[float, float]:
         fitted = _fit(estimator, epsilon, X, y_values, gradients)
-        return _relative_error(y_valid_values, fitted.predict(X_valid))
+        return _relative_error(y_valid_values, fitted.predict(X_valid)), fitted.condition_
 
     return _search(estimator, X, y_values, gradients, epsilons, max_condition, refit, score)
 
@@ -247,9 +250,9 @@ def gradient_search(
 
     fit_gradients = gradients if use_gradients_in_fit else None
 
-    def score(epsilon: float) -> float:
+    def score(epsilon: float) -> tuple[float, float]:
         fitted = _fit(estimator, epsilon, X, y_values, fit_gradients)
-        return _relative_error(gradients, fitted.predict_gradient(X))
+        return _relative_error(gradients, fitted.predict_gradient(X)), fitted.condition_
 
     return _search(estimator, X, y_values, fit_gradients, epsilons, max_condition, refit, score)
 
@@ -286,9 +289,15 @@ def _search(
     epsilons: ArrayLike,
     max_condition: float,
     refit: bool,
-    score: Any,
+    score: Callable[[float], tuple[float, float | None]],
 ) -> SearchResult:
-    """Score every candidate, drop the badly conditioned ones, and pick the best."""
+    """Score every candidate, drop the badly conditioned ones, and pick the best.
+
+    ``score`` returns ``(error, condition)``. A search whose scoring already fits the
+    full-data model reports its condition number from that same fit; ``None`` means the
+    condition has to be measured with an extra fit, which is the case for k-fold, where
+    scoring only ever fits fold models.
+    """
     epsilons = np.sort(np.asarray(epsilons, dtype=np.float64).ravel())
     if epsilons.size == 0:
         raise ValueError("epsilons must contain at least one candidate.")
@@ -302,8 +311,10 @@ def _search(
 
     for i, epsilon in enumerate(epsilons):
         try:
-            conditions[i] = _fit(estimator, epsilon, X, y, gradients).condition_
-            scores[i] = score(epsilon)
+            scores[i], condition = score(epsilon)
+            if condition is None:
+                condition = _fit(estimator, epsilon, X, y, gradients).condition_
+            conditions[i] = condition
         except np.linalg.LinAlgError:
             # Wide basis functions make every centre look alike, and past some point the
             # system is singular to working precision. That is a candidate to discard, not
