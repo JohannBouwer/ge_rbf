@@ -1,11 +1,26 @@
 # GE_RBF
 
-Radial basis function (RBF) surrogate modelling strategies developed during my PhD
-research ([1](https://doi.org/10.1080/15397734.2021.1950549),
-[2](https://doi.org/10.3390/mca28020057),
-[3](https://doi.org/10.1016/j.cma.2023.116648)). The work is about two things: using
-sampled gradient information when building RBF surrogates, and pre-processing the sampled
-data into a coordinate frame where those surrogates actually work well.
+Radial basis function (RBF) surrogate modelling strategies developed during my PhD research.
+The work is about two things: using sampled gradient information when building RBF surrogates,
+and pre-processing the sampled data into a coordinate frame where those surrogates actually
+work well.
+
+## Paper
+
+> Johann Bouwer, Daniel N. Wilke and Schalk Kok.
+> **A novel and fully automated coordinate system transformation scheme for near optimal
+> surrogate construction.**
+> *Computer Methods in Applied Mechanics and Engineering* **419** (2024), 116648.
+> [doi.org/10.1016/j.cma.2023.116648](https://doi.org/10.1016/j.cma.2023.116648)
+
+This package implements that paper: the transformation scheme is `IsotropicTransformer`, the
+surrogates are `RBFRegressor`, and the test function of Section 5 is `problems.non_isotropic`.
+[`notebooks/03_transformations.ipynb`](notebooks/03_transformations.ipynb) reproduces its central
+results. Section references throughout this README and the source point at this paper.
+
+Two earlier papers whose methods also appear here:
+[Mech. Based Des. Struct. Mach. (2021)](https://doi.org/10.1080/15397734.2021.1950549) and
+[Math. Comput. Appl. 28(2):57 (2023)](https://doi.org/10.3390/mca28020057).
 
 ## The idea in one paragraph
 
@@ -20,6 +35,7 @@ estimating it well needs *local* curvature estimates rather than a global one.
 
 ## Contents
 
+- [Paper](#paper)
 - [Installation](#installation)
 - [Quick start](#quick-start)
 - [Models](#models)

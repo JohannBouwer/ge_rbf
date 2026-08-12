@@ -5,8 +5,7 @@ Implements the surrogate modelling strategies developed in:
 - Bouwer, Wilke & Kok (2024), *A novel and fully automated coordinate system transformation
   scheme for near optimal surrogate construction*, Comput. Methods Appl. Mech. Engrg.
   https://doi.org/10.1016/j.cma.2023.116648
-- Bouwer, Wilke & Kok (2023), *Gradient-only surrogate to resolve learning rates for robust
-  and consistent training of deep neural networks*, Math. Comput. Appl.
+- Bouwer, Wilke & Kok (2023), Math. Comput. Appl. 28(2):57
   https://doi.org/10.3390/mca28020057
 - Bouwer, Wilke & Kok (2021), Mech. Based Des. Struct. Mach.
   https://doi.org/10.1080/15397734.2021.1950549
