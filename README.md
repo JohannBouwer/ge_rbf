@@ -144,7 +144,16 @@ uv run jupyter lab
 - [`notebooks/01_models.ipynb`](notebooks/01_models.ipynb) — the three model types
 - [`notebooks/02_shape_parameter.ipynb`](notebooks/02_shape_parameter.ipynb) — the three searches
 - [`notebooks/03_transformations.ipynb`](notebooks/03_transformations.ipynb) — the transformation
-  methods compared, plus a study of how the benefit holds up from 2 to 16 dimensions
+  methods compared, how the benefit holds up from 2 to 16 dimensions, and where sampled gradients
+  are actually worth spending
+
+That last section is the one to read if you read only one. Holding model flexibility fixed and
+varying only what the gradients are used for, across 11 dimension/sample-size configurations:
+spending them on the **coordinate frame** cuts the error by a median of **1.88×** (function-value
+models) or **1.84×** (gradient-enhanced), while spending them as **extra rows in the fitting system**
+buys **1.10×** — and makes the model worse in 2 of the 11. The dominant error is the mismatch
+between an isotropic basis and an anisotropic response, not a shortage of information about the
+function. If gradients are available, the frame and the shape-parameter search are where they pay.
 
 A note on reading that last one. Comparing accuracy across dimensions needs a rule for how many
 samples each dimension gets, and **no affordable rule is fair**. RBF accuracy tracks the fill
