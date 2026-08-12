@@ -35,17 +35,18 @@ estimating it well needs *local* curvature estimates rather than a global one.
 
 ## Contents
 
-- [Paper](#paper)
-- [Installation](#installation)
-- [Quick start](#quick-start)
-- [Models](#models)
-- [Shape parameter selection](#shape-parameter-selection)
-- [Coordinate transformations](#coordinate-transformations)
-- [Test problems](#test-problems)
-- [Notebooks](#notebooks)
-- [Implementation notes vs. the paper](#implementation-notes-vs-the-paper)
-- [Development](#development)
-- [Citation](#citation)
+- [GE\_RBF](#ge_rbf)
+  - [Paper](#paper)
+  - [The idea in one paragraph](#the-idea-in-one-paragraph)
+  - [Contents](#contents)
+  - [Installation](#installation)
+  - [Quick start](#quick-start)
+  - [Models](#models)
+  - [Shape parameter selection](#shape-parameter-selection)
+  - [Coordinate transformations](#coordinate-transformations)
+  - [Test problems](#test-problems)
+  - [Notebooks](#notebooks)
+  - [Citation](#citation)
 
 ## Installation
 
@@ -171,56 +172,8 @@ buys **1.10×** — and makes the model worse in 2 of the 11. The dominant error
 between an isotropic basis and an anisotropic response, not a shortage of information about the
 function. If gradients are available, the frame and the shape-parameter search are where they pay.
 
-A note on reading that last one. Comparing accuracy across dimensions needs a rule for how many
-samples each dimension gets, and **no affordable rule is fair**. RBF accuracy tracks the fill
-distance, which scales as `n^(-1/d)`, so matching the sample density of a 20-point 2-D design would
-take 2.6 × 10¹⁰ points in 16-D. Going from `n = 5d` to `n = d(d+1)/2` at 16 dimensions raises the
-count by 70% and tightens the spacing by 3% — every polynomial budget is asymptotically the same
-budget. Absolute errors are therefore not comparable across dimensions; the ratio between frames at
-matched sample count is. The notebook budgets by `n = c·d(d+1)/2` — one multiple of the number of
-free parameters in a symmetric Hessian — because that holds the *frame-estimation* problem equally
-determined across dimensions, which is the thing the study is actually about.
-
 Committed outputs are current: the notebooks are executed as part of the release checks.
 
-## Implementation notes vs. the paper
-
-Three points where the code deliberately departs from the published description. All three
-were in the original implementation and are kept so that results reproduce; they are
-recorded here because the paper alone would not predict them.
-
-1. **Combining local Hessians.** Eq. 20 specifies the *mean* of the reconstructed local
-   Hessians. The code uses an element-wise **median**, which is far less sensitive to a
-   single badly conditioned local estimate. This is not cosmetic — on a 4-D `non_isotropic`
-   problem the two give normalised eigenvalue spectra differing by up to 0.8.
-2. **SR1 initialisation.** Procedure 2 line 2 specifies `H₀ = I`. The code initialises each
-   local estimate from the outer product of the gradient at that point, `∇f ∇fᵀ`.
-3. **SR1 early exit.** The code stops a sweep if any component of the SR1 numerator falls
-   below `1e-6`, guarding against a vanishing denominator. This guard is not in the paper.
-   It never triggered across 9 000 updates on the problems studied there.
-
-One point is **unresolved** and worth checking against your copy of the paper. Eq. 32 reads
-`Aᵢ = -2·exp(-(2i-N)²/N) + 3`, whereas `non_isotropic` implements
-`-2·exp(-(2i-N)²/(2N)) + 3` — a factor of two in the Gaussian width. Both satisfy the
-stated `[1, 3]` bound, and the code's form is what produced the published results, so the
-implementation is unchanged pending confirmation. The frequency (Eq. 33) matches: the
-code's sigmoid gives exactly the stated `[0.5π, 2π]` range.
-
-## Development
-
-```bash
-uv run pytest
-uv run ruff check . && uv run ruff format --check .
-```
-
-`tests/test_legacy_regression.py` checks the package against numerical output captured from
-the pre-refactor implementation, so the research results are pinned. Two places
-intentionally differ and are asserted as bounded differences: gradient-only fits now go
-through `lstsq` rather than the normal equations `KᵀK w = KᵀY`, which squared the condition
-number of an already delicate system; and eigendecompositions are now canonically ordered
-and signed, so transformed *coordinates* can be permuted or sign-flipped. Neither is
-visible in a prediction — the kernel depends only on Euclidean distance, which neither
-operation changes.
 
 ## Citation
 
