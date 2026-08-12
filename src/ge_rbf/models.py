@@ -169,8 +169,7 @@ class RBFRegressor(RegressorMixin, BaseEstimator):
         system = np.vstack(blocks)
         rhs = np.concatenate(right_hand_side)
 
-        self.coef_ = self._solve(system, rhs)
-        self.condition_ = float(np.linalg.cond(system))
+        self.coef_, self.condition_ = self._solve(system, rhs)
         self.centers_ = centers
         self.mode_ = mode
         self.n_features_in_ = n_features
@@ -225,7 +224,17 @@ class RBFRegressor(RegressorMixin, BaseEstimator):
             )
         return weight
 
-    def _solve(self, system: NDArray[np.float64], rhs: NDArray[np.float64]) -> NDArray[np.float64]:
+    def _solve(
+        self, system: NDArray[np.float64], rhs: NDArray[np.float64]
+    ) -> tuple[NDArray[np.float64], float]:
+        """Solve for the weights, returning them with the system's condition number.
+
+        The condition number comes from the solve itself wherever possible. ``lstsq``
+        already computes the singular values and hands them back, so its 2-norm condition
+        number is ``s[0] / s[-1]`` at no extra cost — a separate ``np.linalg.cond`` call
+        would repeat the decomposition, which on the stacked gradient-enhanced systems is
+        the single most expensive thing a fit does.
+        """
         square = system.shape[0] == system.shape[1]
         solver = self.solver
 
@@ -238,9 +247,15 @@ class RBFRegressor(RegressorMixin, BaseEstimator):
                     f"solver='solve' needs a square system, but the system is "
                     f"{system.shape[0]}x{system.shape[1]}. Use solver='lstsq' or 'auto'."
                 )
-            return np.linalg.solve(system, rhs)
+            # np.linalg.solve does an LU factorisation, which says nothing about the
+            # singular values, so the condition number needs its own decomposition here.
+            return np.linalg.solve(system, rhs), float(np.linalg.cond(system))
 
-        return np.linalg.lstsq(system, rhs, rcond=None)[0]
+        coefficients, _, _, singular_values = np.linalg.lstsq(system, rhs, rcond=None)
+        smallest = singular_values[-1]
+        condition = np.inf if smallest == 0 else float(singular_values[0] / smallest)
+
+        return coefficients, condition
 
     # --------------------------------------------------------------- prediction
 

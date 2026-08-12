@@ -143,7 +143,18 @@ uv run jupyter lab
 
 - [`notebooks/01_models.ipynb`](notebooks/01_models.ipynb) — the three model types
 - [`notebooks/02_shape_parameter.ipynb`](notebooks/02_shape_parameter.ipynb) — the three searches
-- [`notebooks/03_transformations.ipynb`](notebooks/03_transformations.ipynb) — the transformation methods compared
+- [`notebooks/03_transformations.ipynb`](notebooks/03_transformations.ipynb) — the transformation
+  methods compared, plus a study of how the benefit holds up from 2 to 16 dimensions
+
+A note on reading that last one. Comparing accuracy across dimensions needs a rule for how many
+samples each dimension gets, and **no affordable rule is fair**. RBF accuracy tracks the fill
+distance, which scales as `n^(-1/d)`, so matching the sample density of a 20-point 2-D design would
+take 2.6 × 10¹⁰ points in 16-D. Going from `n = 5d` to `n = d(d+1)/2` at 16 dimensions raises the
+count by 70% and tightens the spacing by 3% — every polynomial budget is asymptotically the same
+budget. Absolute errors are therefore not comparable across dimensions; the ratio between frames at
+matched sample count is. The notebook budgets by `n = c·d(d+1)/2` — one multiple of the number of
+free parameters in a symmetric Hessian — because that holds the *frame-estimation* problem equally
+determined across dimensions, which is the thing the study is actually about.
 
 Committed outputs are current: the notebooks are executed as part of the release checks.
 
