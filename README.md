@@ -172,7 +172,8 @@ buys **1.10×** — and makes the model worse in 2 of the 11. The dominant error
 between an isotropic basis and an anisotropic response, not a shortage of information about the
 function. If gradients are available, the frame and the shape-parameter search are where they pay.
 
-Committed outputs are current: the notebooks are executed as part of the release checks.
+The committed outputs are current — every notebook was executed top to bottom against the code as
+it stands, so you can read the results without running anything.
 
 
 ## Citation

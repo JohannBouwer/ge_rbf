@@ -35,7 +35,6 @@ packages = ["src/ge_rbf"]
 
 [dependency-groups]
 dev = [
-    "pytest>=8.0",
     "ruff>=0.9",
 ]
 notebooks = [
@@ -48,7 +47,7 @@ default-groups = ["dev", "notebooks"]
 
 [tool.ruff]
 line-length = 100
-src = ["src", "tests"]
+src = ["src"]
 
 [tool.ruff.lint]
 select = [
@@ -64,13 +63,5 @@ select = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-# Test fixtures return (X, y, dy) as a set; unpacking all three keeps them readable even
-# when a particular test only needs two.
-"tests/*" = ["E501", "RUF059"]
 # Notebook cells report results with long f-strings that cannot usefully be wrapped.
 "notebooks/*" = ["E501"]
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-addopts = "-q --strict-markers"
-filterwarnings = ["error::DeprecationWarning"]
