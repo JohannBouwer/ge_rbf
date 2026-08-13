@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
+from scipy.stats import qmc
 from sklearn.base import BaseEstimator, RegressorMixin
 from sklearn.exceptions import NotFittedError
 
@@ -31,6 +32,36 @@ from .kernels import Kernel, get_kernel
 __all__ = ["RBFRegressor"]
 
 _SOLVERS = ("auto", "solve", "lstsq")
+
+
+def _draw_centers(
+    n_centers: int,
+    X: NDArray[np.float64],
+    random_state: int | np.random.Generator | None,
+) -> NDArray[np.float64]:
+    """Draw space-filling centres over the bounding box of ``X``.
+
+    Two choices worth stating, because both are easy to "correct" back into worse ones.
+
+    **The box comes from the samples, not from any declared bounds.** A design of
+    experiments does not fill its box in three or more dimensions, so a centre placed in a
+    corner nothing was sampled from contributes a column of near-zeros — an
+    ill-conditioned direction that buys no expressiveness.
+
+    **The draw happens in whatever coordinates ``fit`` was given**, which is to say after
+    any coordinate frame has been applied, because that is where the kernel measures
+    distance. A Latin hypercube drawn before a frame and then rotated into it is no longer
+    stratified. The cost is that an axis-aligned box around framed samples is larger than
+    their rotated hull, so a few centres land in empty corners; least squares copes and
+    ``condition_`` reports it.
+    """
+    if n_centers < 1:
+        raise ValueError(f"centers must be at least 1 when given as a count, got {n_centers}.")
+
+    lower, upper = X.min(axis=0), X.max(axis=0)
+    unit = qmc.LatinHypercube(d=X.shape[1], seed=random_state).random(n_centers)
+
+    return lower + unit * (upper - lower)
 
 
 class RBFRegressor(RegressorMixin, BaseEstimator):
@@ -43,10 +74,26 @@ class RBFRegressor(RegressorMixin, BaseEstimator):
     epsilon : float, optional
         Shape parameter of the basis function. This is the hyperparameter the routines in
         :mod:`ge_rbf.selection` search over.
-    centers : array_like of shape (n_centres, n_features), optional
-        Basis function centres. ``None`` (the default) places one centre at every sample,
-        which makes the function-value system square and interpolating. Supplying fewer
-        centres than samples gives a regression fit, solved in the least-squares sense.
+    centers : int or array_like of shape (n_centres, n_features), optional
+        Basis function centres, in one of three forms.
+
+        ``None`` (the default) places one centre at every sample, which makes the
+        function-value system square and interpolating.
+
+        An **integer** draws that many space-filling centres (Latin hypercube) over the
+        bounding box of the samples, at fit time. This decouples where the response is
+        *sampled* from where it is *represented*, which matters when the samples are
+        clustered — trajectory data strung along a few paths otherwise hands the basis its
+        own anisotropy, packing centres tightly along each path and leaving them sparse
+        across designs, so neighbouring centres look nearly identical and the system is ill
+        conditioned by construction. Use ``random_state`` to make the draw reproducible,
+        and :func:`~ge_rbf.selection.basis_search` to choose the count.
+
+        An **array** uses those centres verbatim.
+
+        Anything other than one centre per sample makes the fit a regression rather than an
+        interpolation, solved in the least-squares sense, so it no longer has to pass
+        exactly through samples that carry solver tolerance in them.
     gradient_weight : float or {"auto"}, optional
         Relative weight of the gradient rows in a gradient-enhanced or gradient-only fit.
         ``None`` (the default) weights them equally with the function rows, which is the
@@ -57,12 +104,16 @@ class RBFRegressor(RegressorMixin, BaseEstimator):
         ``"auto"`` uses a direct solve when the system is square and least squares
         otherwise. ``"lstsq"`` forces least squares, which is more robust on
         ill-conditioned systems; ``"solve"`` requires a square system and raises otherwise.
+    random_state : int or Generator, optional
+        Seeds the centre draw. Used only when ``centers`` is an integer, and ignored
+        otherwise.
 
     Attributes
     ----------
     coef_ : ndarray of shape (n_centres,)
         Fitted basis function weights.
     centers_ : ndarray of shape (n_centres, n_features)
+        The centres actually used, including those drawn from an integer ``centers``.
     condition_ : float
         Condition number of the (possibly stacked) system matrix. Large values mean the
         fit is numerically delicate; the search routines in :mod:`ge_rbf.selection` use it
@@ -89,12 +140,14 @@ class RBFRegressor(RegressorMixin, BaseEstimator):
         centers: ArrayLike | None = None,
         gradient_weight: float | str | None = None,
         solver: str = "auto",
+        random_state: int | np.random.Generator | None = None,
     ) -> None:
         self.kernel = kernel
         self.epsilon = epsilon
         self.centers = centers
         self.gradient_weight = gradient_weight
         self.solver = solver
+        self.random_state = random_state
 
     # ------------------------------------------------------------------ fitting
 
@@ -115,7 +168,9 @@ class RBFRegressor(RegressorMixin, BaseEstimator):
         y : array_like of shape (n_samples,) or (n_samples, 1), optional
             Sampled function values. Required except in gradient-only mode.
         dy : array_like of shape (n_samples, n_features), optional
-            Sampled gradients. Supplying these gives a gradient-enhanced model.
+            Sampled gradients. Supplying these gives a gradient-enhanced model. Note that
+            a gradient-enhanced system has ``n_samples * (1 + n_features)`` rows, so more
+            centres than samples is legitimate here and is not rejected.
         anchor_X, anchor_y : array_like, optional
             Locations and function values used to anchor a gradient-only model. Gradients
             alone determine the surrogate only up to an additive constant, so at least one
@@ -134,7 +189,13 @@ class RBFRegressor(RegressorMixin, BaseEstimator):
 
         mode = self._infer_mode(y, dy, anchor_X, anchor_y)
 
-        centers = X if self.centers is None else check_samples(self.centers, name="centers")
+        if self.centers is None:
+            centers = X
+        elif np.ndim(self.centers) == 0:
+            centers = _draw_centers(int(self.centers), X, self.random_state)
+        else:
+            centers = check_samples(self.centers, name="centers")
+
         if centers.shape[1] != n_features:
             raise ValueError(f"centers have {centers.shape[1]} features but X has {n_features}.")
 
@@ -253,7 +314,12 @@ class RBFRegressor(RegressorMixin, BaseEstimator):
 
         coefficients, _, _, singular_values = np.linalg.lstsq(system, rhs, rcond=None)
         smallest = singular_values[-1]
-        condition = np.inf if smallest == 0 else float(singular_values[0] / smallest)
+
+        # A denormal smallest singular value overflows the ratio to inf, which is the right
+        # answer — the system is singular to working precision — so the warning numpy would
+        # emit is noise on an expected path. The searches read inf as "reject this".
+        with np.errstate(over="ignore"):
+            condition = np.inf if smallest == 0 else float(singular_values[0] / smallest)
 
         return coefficients, condition
 

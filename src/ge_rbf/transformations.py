@@ -32,12 +32,35 @@ Available methods
     gradients. A global measure rather than a collection of local ones.
 ``"ideal"``
     A rotation and scaling you supply, for when the optimal frame is known.
+``"identity"``
+    The frame that does nothing. Useful as an explicit "no transformation" branch, so
+    comparisons do not need a separate code path, and as the terminal state of the
+    ``fallback`` retreat below.
 
 Unlike the original implementation, a transformer never modifies the estimator or data it
 is given. It computes a frame and holds it; you apply it explicitly.
+
+When a frame cannot be estimated
+--------------------------------
+The per-direction scalers are the square roots of the curvature estimate's eigenvalues, so
+an estimate that is not positive definite does not describe a frame at all and
+:func:`~ge_rbf._linalg.sqrt_eigenvalues` refuses it rather than guessing. Local Hessians
+built from gradients are positive definite only where the response is locally convex,
+which a trajectory through a limit point need not be — and whether it happens depends on
+the sample set, so it cannot be settled once before fitting. Passing ``fallback=True``
+retreats through :data:`FALLBACK_METHODS` instead of raising, warns each time, and records
+what actually produced the frame on ``method_``.
+
+This is the one place in the package that warns rather than raising, and it sets the
+convention: :class:`ValueError` for anything the caller can fix, :class:`RuntimeWarning`
+when the package has silently done something less good than what was asked for. So
+``warnings.filterwarnings("error", category=RuntimeWarning)`` makes every such degradation
+fatal.
 """
 
 from __future__ import annotations
+
+import warnings
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
@@ -45,11 +68,26 @@ from scipy.spatial.distance import cdist
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.exceptions import NotFittedError
 
-from ._linalg import check_gradients, check_samples, check_targets, sqrt_eigenvalues, symmetric_eigh
+from ._linalg import (
+    DegenerateCurvatureError,
+    check_gradients,
+    check_samples,
+    check_targets,
+    sqrt_eigenvalues,
+    symmetric_eigh,
+)
 
-__all__ = ["IsotropicTransformer"]
+__all__ = ["FALLBACK_METHODS", "METHODS", "IsotropicTransformer"]
 
-METHODS = ("ge-lhm", "ge-dlhm", "fv-lhm", "asm", "ideal")
+METHODS = ("ge-lhm", "ge-dlhm", "fv-lhm", "asm", "ideal", "identity")
+
+# Tried in order by fallback=True. "ge-dlhm" keeps the diagonal of the same curvature
+# estimate, a scaling with no rotation, so it is the smallest possible retreat. "asm" swaps
+# it for the averaged outer product of the gradients, positive semi-definite by
+# construction and so almost always able to produce a frame -- though not necessarily a
+# good one: on at least one dataset it measured worse than no frame at all (6881x
+# anisotropy against ge-lhm's 21x), which is why it sits last before doing nothing.
+FALLBACK_METHODS = ("ge-dlhm", "asm", "identity")
 
 # Tolerance below which an SR1 update is considered degenerate and the sweep stops.
 _SR1_TOLERANCE = 1e-6
@@ -64,7 +102,7 @@ class IsotropicTransformer(TransformerMixin, BaseEstimator):
 
     Parameters
     ----------
-    method : {"ge-lhm", "ge-dlhm", "fv-lhm", "asm", "ideal"}, optional
+    method : {"ge-lhm", "ge-dlhm", "fv-lhm", "asm", "ideal", "identity"}, optional
         How the frame is estimated. See the module docstring.
     n_neighbors : int, optional
         Points used per local curvature estimate, for the LHM methods. ``None`` uses the
@@ -77,6 +115,15 @@ class IsotropicTransformer(TransformerMixin, BaseEstimator):
         These are used **directly** as the scalers. (The original implementation squared
         rooted whatever was passed here, which made the argument mean "eigenvalues" while
         being documented as "scalers".)
+    fallback : bool, optional
+        When True, retreat through :data:`FALLBACK_METHODS` if the requested method cannot
+        produce a frame, emitting a :class:`RuntimeWarning` at each step and recording the
+        method that succeeded on ``method_``. The retreat ends at ``"identity"``, which
+        cannot fail, so a fitted transformer is always returned.
+
+        Only a :class:`~ge_rbf._linalg.DegenerateCurvatureError` triggers the retreat. A
+        missing ``dy``, a bad ``n_neighbors`` or a wrong shape still raises, so a typo
+        cannot be mistaken for a response that has no frame.
 
     Attributes
     ----------
@@ -89,6 +136,9 @@ class IsotropicTransformer(TransformerMixin, BaseEstimator):
     curvature_ : ndarray of shape (n_features, n_features)
         The global curvature estimate the frame was derived from: an averaged Hessian for
         the LHM methods, the gradient covariance for ``"asm"``.
+    method_ : str
+        Which method actually produced the frame. Equal to ``method`` unless ``fallback``
+        is set and a retreat happened.
     n_features_in_ : int
 
     Notes
@@ -116,11 +166,13 @@ class IsotropicTransformer(TransformerMixin, BaseEstimator):
         n_neighbors: int | None = None,
         rotation: ArrayLike | None = None,
         scaling: ArrayLike | None = None,
+        fallback: bool = False,
     ) -> None:
         self.method = method
         self.n_neighbors = n_neighbors
         self.rotation = rotation
         self.scaling = scaling
+        self.fallback = fallback
 
     # ------------------------------------------------------------------ fitting
 
@@ -140,27 +192,68 @@ class IsotropicTransformer(TransformerMixin, BaseEstimator):
         Returns
         -------
         self
+
+        Raises
+        ------
+        DegenerateCurvatureError
+            When the curvature estimate does not describe a frame and ``fallback`` is
+            False. With ``fallback=True`` this is caught and retreated from instead.
         """
         if self.method not in METHODS:
             raise ValueError(f"method must be one of {METHODS}, got {self.method!r}.")
 
         X = check_samples(X)
-        n_features = X.shape[1]
-        self.n_features_in_ = n_features
+        self.n_features_in_ = X.shape[1]
 
-        if self.method == "ideal":
-            self._fit_ideal(n_features)
+        if not self.fallback:
+            self._fit_frame(X, y, dy, self.method)
+            self.method_ = self.method
             return self
 
-        if self.method == "asm":
+        # The chain always ends at "identity", which cannot raise, so this loop cannot
+        # fall through.
+        for name in (self.method, *(m for m in FALLBACK_METHODS if m != self.method)):
+            try:
+                self._fit_frame(X, y, dy, name)
+            except DegenerateCurvatureError as error:
+                warnings.warn(
+                    f"method={name!r} produced no usable frame ({error}); retreating.",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
+                continue
+
+            self.method_ = name
+            return self
+
+        return self  # pragma: no cover - unreachable while "identity" ends the chain
+
+    def _fit_frame(
+        self, X: NDArray[np.float64], y: ArrayLike | None, dy: ArrayLike | None, method: str
+    ) -> None:
+        """Estimate the frame by one named method, setting the fitted attributes."""
+        n_features = X.shape[1]
+
+        if method == "ideal":
+            self._fit_ideal(n_features)
+            return
+
+        if method == "identity":
+            self.rotation_ = np.identity(n_features)
+            self.scaling_ = np.ones(n_features)
+            self.eigenvalues_ = np.ones(n_features)
+            self.curvature_ = np.identity(n_features)
+            return
+
+        if method == "asm":
             self.curvature_ = self._gradient_covariance(X, dy)
             eigenvalues, rotation = symmetric_eigh(self.curvature_)
 
-        elif self.method in ("ge-lhm", "ge-dlhm"):
-            local = self._local_hessians_from_gradients(X, dy)
+        elif method in ("ge-lhm", "ge-dlhm"):
+            local = self._local_hessians_from_gradients(X, dy, method)
             self.curvature_ = self._combine_local_hessians(local)
 
-            if self.method == "ge-dlhm":
+            if method == "ge-dlhm":
                 # Component-wise scaling only: keep the diagonal, drop the rotation.
                 eigenvalues = np.diag(self.curvature_).copy()
                 rotation = np.identity(n_features)
@@ -172,11 +265,13 @@ class IsotropicTransformer(TransformerMixin, BaseEstimator):
             self.curvature_ = self._combine_local_hessians(local)
             eigenvalues, rotation = symmetric_eigh(self.curvature_)
 
+        # Assigned last: sqrt_eigenvalues raises on a degenerate estimate, and the retreat
+        # moves on to the next method, so scaling_ must not be left half-set.
+        scaling = sqrt_eigenvalues(eigenvalues)
+
         self.eigenvalues_ = eigenvalues
         self.rotation_ = rotation
-        self.scaling_ = sqrt_eigenvalues(eigenvalues)
-
-        return self
+        self.scaling_ = scaling
 
     def _fit_ideal(self, n_features: int) -> None:
         if self.rotation is None or self.scaling is None:
@@ -212,7 +307,7 @@ class IsotropicTransformer(TransformerMixin, BaseEstimator):
         return gradients.T @ gradients / gradients.shape[0]
 
     def _local_hessians_from_gradients(
-        self, X: NDArray[np.float64], dy: ArrayLike | None
+        self, X: NDArray[np.float64], dy: ArrayLike | None, method: str = "ge-lhm"
     ) -> NDArray[np.float64]:
         """One local Hessian per sample, from symmetric rank-one updates over neighbours.
 
@@ -236,7 +331,7 @@ class IsotropicTransformer(TransformerMixin, BaseEstimator):
            paper and, in testing, never triggered on the problems studied there.
         """
         if dy is None:
-            raise ValueError(f"method={self.method!r} requires gradients; pass dy.")
+            raise ValueError(f"method={method!r} requires gradients; pass dy.")
 
         n_samples, n_features = X.shape
         gradients = check_gradients(dy, n_samples, n_features)

@@ -20,6 +20,7 @@ import numpy as np
 from numpy.typing import ArrayLike, NDArray
 
 __all__ = [
+    "DegenerateCurvatureError",
     "check_gradients",
     "check_samples",
     "check_targets",
@@ -27,6 +28,20 @@ __all__ = [
     "sqrt_eigenvalues",
     "symmetric_eigh",
 ]
+
+
+class DegenerateCurvatureError(ValueError):
+    """A curvature estimate that does not describe a coordinate frame.
+
+    Raised by :func:`sqrt_eigenvalues` when the estimate is indefinite or singular, so
+    that the per-direction scalers :math:`\\sqrt{\\lambda}` do not exist.
+
+    It is a subclass of :class:`ValueError` so that callers catching ``ValueError`` are
+    unaffected. It exists as its own type so that
+    :class:`~ge_rbf.transformations.IsotropicTransformer`'s ``fallback`` retreat can catch
+    *this* failure specifically, and not a missing ``dy`` or a wrong shape — a retreat
+    that catches every ``ValueError`` turns a typo into a silent identity frame.
+    """
 
 
 def check_samples(X: ArrayLike, *, name: str = "X") -> NDArray[np.float64]:
@@ -158,19 +173,24 @@ def sqrt_eigenvalues(eigenvalues: NDArray[np.float64]) -> NDArray[np.float64]:
     (the element-wise median of positive semi-definite matrices is not itself guaranteed
     to be positive semi-definite) and eigenvalues at exactly zero (a direction along which
     the curvature estimate is degenerate, which would collapse that axis entirely).
+
+    Raises
+    ------
+    DegenerateCurvatureError
+        In either case. This is a ``ValueError``, so existing handlers still catch it.
     """
     eigenvalues = np.asarray(eigenvalues, dtype=np.float64)
 
     if np.any(eigenvalues < 0):
         negative = eigenvalues[eigenvalues < 0]
-        raise ValueError(
+        raise DegenerateCurvatureError(
             "Curvature estimate has negative eigenvalues "
             f"(smallest {negative.min():.3e}); it is not positive semi-definite, so the "
             "coordinate scalers sqrt(lambda) are undefined."
         )
 
     if np.any(eigenvalues == 0):
-        raise ValueError(
+        raise DegenerateCurvatureError(
             "Curvature estimate has a zero eigenvalue, so at least one coordinate "
             "direction would be scaled to zero. This usually means there are too few "
             "samples to estimate curvature in every direction."

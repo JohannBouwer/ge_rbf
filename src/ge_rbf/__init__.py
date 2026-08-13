@@ -30,12 +30,17 @@ from importlib.metadata import PackageNotFoundError, version
 from .kernels import GaussianKernel, Kernel
 from .models import RBFRegressor
 from .selection import (
+    BasisSearchResult,
     SearchResult,
+    basis_search,
     gradient_search,
     kfold_search,
+    plot_basis_search,
     plot_search,
+    scaled_epsilons,
     validation_search,
 )
+from .trajectories import TrajectoryScaler
 from .transformations import IsotropicTransformer
 
 try:
@@ -44,14 +49,19 @@ except PackageNotFoundError:  # pragma: no cover - only when running from a sour
     __version__ = "0.0.0+unknown"
 
 __all__ = [
+    "BasisSearchResult",
     "GaussianKernel",
     "IsotropicTransformer",
     "Kernel",
     "RBFRegressor",
     "SearchResult",
+    "TrajectoryScaler",
     "__version__",
+    "basis_search",
     "gradient_search",
     "kfold_search",
+    "plot_basis_search",
     "plot_search",
+    "scaled_epsilons",
     "validation_search",
 ]

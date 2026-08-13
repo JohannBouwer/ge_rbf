@@ -12,6 +12,11 @@ computed from it.
 
 The module is named ``problems`` rather than ``test_problems`` so that pytest's default
 ``test_*.py`` collection does not try to import it as a test module.
+
+:func:`load_path_samples` and :func:`load_path` are the exception to the uniform signature
+above: together they stand in for a *family of solved paths* rather than a field sampled at
+scattered points, which is a different shape of data and needs its own sampling geometry.
+See :mod:`ge_rbf.trajectories`.
 """
 
 from __future__ import annotations
@@ -19,12 +24,15 @@ from __future__ import annotations
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
 from scipy.linalg import expm
+from scipy.stats import qmc
 
 from ._linalg import check_samples
 
 __all__ = [
     "ackley",
     "beale",
+    "load_path",
+    "load_path_samples",
     "non_isotropic",
     "random_rotation",
     "rastrigin",
@@ -119,6 +127,187 @@ def non_isotropic(
     grad = grad_z if rotation is None else grad_z @ rotation.T
 
     return f, grad
+
+
+def load_path_samples(
+    n_designs: int = 15,
+    n_steps: int = 18,
+    n_variables: int = 3,
+    *,
+    arc_length: float = 1.0,
+    ragged: float = 0.25,
+    rng: np.random.Generator | int | None = 0,
+) -> tuple[NDArray[np.float64], NDArray[np.int_]]:
+    """Sampling geometry of a family of solved paths.
+
+    A continuation or transient solver does not return scattered points. It returns a
+    handful of *trajectories*: one per design, each a chain of closely spaced states
+    parametrised by a time-like coordinate. Stacked into one array that is a very
+    particular clustering, and it is the clustering — not the response — that breaks the
+    usual defaults. This function produces the geometry with no response attached, so the
+    two can be varied independently.
+
+    Designs are drawn by Latin hypercube on the unit cube, so any anisotropy in the layout
+    is the doing of the trajectory axis alone.
+
+    Parameters
+    ----------
+    n_designs : int, optional
+        Number of trajectories.
+    n_steps : int, optional
+        Stored points per trajectory.
+    n_variables : int, optional
+        Number of design variables. The returned array has one more column than this.
+    arc_length : float, optional
+        Nominal length of a trajectory, in whatever units the trajectory coordinate is
+        measured in. Only the *ratio* of this to the design spacing matters to anything
+        downstream, so changing it is a units change and nothing more.
+    ragged : float, optional
+        Fractional spread of trajectory lengths about ``arc_length``, so paths end at
+        different points as real ones do. ``0`` makes every path the same length.
+    rng : Generator or int, optional
+        Seed or generator, for reproducibility.
+
+    Returns
+    -------
+    Z : ndarray of shape (n_designs * n_steps, n_variables + 1)
+        One row per stored point. The design variables come first and the **trajectory
+        coordinate is the last column**, which is what
+        :class:`~ge_rbf.trajectories.TrajectoryScaler` assumes by default.
+    groups : ndarray of shape (n_designs * n_steps,)
+        Which trajectory each row belongs to.
+
+    Notes
+    -----
+    At the defaults this reproduces the layout measured on real load-path data: the mean
+    nearest-neighbour distance between designs is several times the gap between
+    consecutive points along one path, so every point's nearest neighbours are the points
+    before and after it on its own trajectory and nothing else.
+
+    Examples
+    --------
+    >>> from ge_rbf.problems import load_path, load_path_samples
+    >>> Z, groups = load_path_samples()
+    >>> y, dy = load_path(Z)
+    >>> Z.shape, y.shape, dy.shape
+    ((270, 4), (270,), (270, 4))
+    """
+    if n_designs < 1 or n_steps < 1 or n_variables < 1:
+        raise ValueError(
+            f"n_designs, n_steps and n_variables must all be at least 1, got "
+            f"{n_designs}, {n_steps} and {n_variables}."
+        )
+    if arc_length <= 0:
+        raise ValueError(f"arc_length must be positive, got {arc_length}.")
+    if not 0 <= ragged < 1:
+        raise ValueError(f"ragged must be in [0, 1), got {ragged}.")
+
+    generator = np.random.default_rng(rng)
+    designs = qmc.LatinHypercube(d=n_variables, seed=generator).random(n_designs)
+
+    # Each path runs from one step in to its own end point, so no two paths share their
+    # trajectory coordinates exactly.
+    lengths = arc_length * (1 + ragged * (2 * generator.random(n_designs) - 1))
+    steps = np.concatenate([np.linspace(L / n_steps, L, n_steps) for L in lengths])
+
+    Z = np.column_stack([np.repeat(designs, n_steps, axis=0), steps])
+    groups = np.repeat(np.arange(n_designs), n_steps)
+
+    return Z, groups
+
+
+def load_path(
+    Z: ArrayLike,
+    *,
+    arc_length: float = 1.0,
+    n_periods: float = 0.75,
+    rotation: ArrayLike | None = None,
+) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+    r"""A response traced along a load path, over the design variables and the path together.
+
+    .. math:: f(x, s) = A(x) \sin(\omega(x) s) + g(x)
+
+    with :math:`A(x) = 1 + \kappa\,\overline{x}`, :math:`\omega(x) = \omega_0 (1 + \beta x_0)`
+    and :math:`g` the package's own anisotropic test function :func:`non_isotropic`.
+    Constants are :math:`\kappa = 0.5`, :math:`\beta = 0.3` and
+    :math:`\omega_0 = 2\pi\,\texttt{n\_periods} / \texttt{arc\_length}`.
+
+    Three features make this harder than a smooth field, and each is there for a reason:
+
+    **A limit point at a design-dependent location.** :math:`\partial f/\partial s = 0` at
+    :math:`\omega s = \pi/2`, and because :math:`\omega` varies with :math:`x_0` that peak
+    sits at a different point along every path. Past :math:`\omega s = \pi` the curvature
+    in :math:`s` changes sign, so the local Hessians are genuinely indefinite over part of
+    the domain — which is exactly when ``"ge-lhm"`` cannot produce a frame and has to
+    retreat.
+
+    **Curvature coupling between a design axis and the path axis.** Because
+    :math:`\omega` depends on :math:`x_0`, :math:`\partial^2 f / \partial x_0 \partial s`
+    is non-zero: there is a genuine rotation mixing the two for a transformation scheme to
+    find. Without it, scaling the trajectory axis would be cosmetic.
+
+    **Anisotropy across the design variables**, inherited from :func:`non_isotropic`, whose
+    ideal frame is known. Passing a ``rotation`` couples the design variables as well.
+
+    Parameters
+    ----------
+    Z : array_like of shape (n_samples, n_variables + 1)
+        Design variables followed by the trajectory coordinate in the last column, as
+        returned by :func:`load_path_samples`.
+    arc_length : float, optional
+        The nominal path length ``Z`` was generated with. It sets :math:`\omega_0`, so
+        passing the same value used for :func:`load_path_samples` keeps the response the
+        same shape whatever units the trajectory coordinate is in.
+    n_periods : float, optional
+        How much of a period of the path oscillation fits in ``arc_length``. Larger values
+        put more sign changes of the path curvature inside the sampled range.
+    rotation : array_like of shape (n_variables, n_variables), optional
+        Passed to :func:`non_isotropic` to couple the design variables. Note it applies to
+        the design block only, never to the trajectory coordinate.
+
+    Returns
+    -------
+    f : ndarray of shape (n_samples,)
+    grad : ndarray of shape (n_samples, n_variables + 1)
+        Derivatives with respect to the design variables, then with respect to the
+        trajectory coordinate — the same column order as ``Z``.
+    """
+    Z = check_samples(Z, name="Z")
+    if Z.shape[1] < 2:
+        raise ValueError(
+            f"Z needs at least one design variable and a trajectory coordinate, so at "
+            f"least 2 columns; got {Z.shape[1]}."
+        )
+    if arc_length <= 0:
+        raise ValueError(f"arc_length must be positive, got {arc_length}.")
+
+    X, s = Z[:, :-1], Z[:, -1]
+    n_variables = X.shape[1]
+
+    kappa, beta = 0.5, 0.3
+    base_frequency = 2 * np.pi * n_periods / arc_length
+
+    amplitude = 1 + kappa * np.mean(X, axis=1)
+    frequency = base_frequency * (1 + beta * X[:, 0])
+
+    g, dg = non_isotropic(X, rotation)
+
+    phase = frequency * s
+    f = amplitude * np.sin(phase) + g
+
+    # d(amplitude)/dx_i is kappa/n_variables for every i; d(frequency)/dx_i is non-zero
+    # for the first variable only, and it is what couples the design and path axes.
+    d_frequency = np.zeros(n_variables)
+    d_frequency[0] = base_frequency * beta
+
+    grad_x = (
+        (kappa / n_variables) * np.sin(phase)[:, None]
+        + (amplitude * s * np.cos(phase))[:, None] * d_frequency
+        + dg
+    )
+    grad_s = amplitude * frequency * np.cos(phase)
+
+    return f, np.column_stack([grad_x, grad_s])
 
 
 def rosenbrock(X: ArrayLike) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
